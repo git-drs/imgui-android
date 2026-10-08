@@ -18,7 +18,7 @@ class GenerateLibs extends DefaultTask {
         'include/imgui-node-editor',
         'include/imguizmo',
         'include/implot',
-        'include/ImGuiColorTextEdit',
+//        'include/ImGuiColorTextEdit',
 //        'include/ImGuiFileDialog',
         'include/imgui_club/imgui_memory_editor',
         'include/imgui-knobs'
@@ -80,12 +80,6 @@ class GenerateLibs extends DefaultTask {
             spec.into(jniDir)
         }
 
-        // Ensure the active ImGuiColorTextEdit snapshot wins even if a stale TextEditor.* exists in the JNI dir.
-        project.copy { CopySpec spec ->
-            spec.from(project.rootProject.file('include/ImGuiColorTextEdit')) { CopySpec s -> s.include('TextEditor.h', 'TextEditor.cpp') }
-            spec.into(jniDir)
-        }
-
         if (withFreeType) {
             project.copy { CopySpec spec ->
                 spec.from(project.rootProject.file('include/imgui/misc/freetype')) { CopySpec it -> it.include('*.h', '*.cpp') }
@@ -99,7 +93,7 @@ class GenerateLibs extends DefaultTask {
             // By defining IMGUI_ENABLE_FREETYPE, Dear ImGui will default to using the FreeType font renderer.
             // However, we modify the source code to ensure that, even with this, the STB_TrueType renderer is used instead.
             // To use the FreeType font renderer, it must be explicitly forced on the atlas manually.
-            replaceSourceFileContent("imgui_draw.cpp", "ImGuiFreeType::GetFontLoader()", "ImFontAtlasGetFontLoaderForStbTruetype()")
+            replaceSourceFileContent("imgui_draw.cpp", "ImGuiFreeType::GetBuilderForFreeType()", "ImFontAtlasGetBuilderForStbTruetype()")
         }
 
         // Copy dirent for ImGuiFileDialog
@@ -109,19 +103,17 @@ class GenerateLibs extends DefaultTask {
         }
 
         // Generate platform dependant ant configs and header files
-        def buildConfig = new BuildConfig('imgui-moulberry92-java', tmpDir, libsDirName, jniDir)
+        def buildConfig = new BuildConfig('imgui-java', tmpDir, libsDirName, jniDir)
         BuildTarget[] buildTargets = []
 
         if (forWindows) {
             def win64 = BuildTarget.newDefaultTarget(Os.Windows, Architecture.Bitness._64)
-            requireCpp17(win64)
             addFreeTypeIfEnabled(win64)
             buildTargets += win64
         }
 
         if (forLinux) {
             def linux64 = BuildTarget.newDefaultTarget(Os.Linux, Architecture.Bitness._64)
-            requireCpp17(linux64)
             addFreeTypeIfEnabled(linux64)
             buildTargets += linux64
         }
@@ -153,13 +145,13 @@ class GenerateLibs extends DefaultTask {
         BuildExecutor.executeAnt(jniDir + '/build.xml', '-v', 'pack-natives')
 
         if (forWindows)
-            checkLibExist("windows64/imgui-moulberry92-java64.dll")
+            checkLibExist("windows64/imgui-java64.dll")
         if (forLinux)
-            checkLibExist("linux64/libimgui-moulberry92-java64.so")
+            checkLibExist("linux64/libimgui-java64.so")
         if (forMac)
-            checkLibExist("macosx64/libimgui-moulberry92-java64.dylib")
+            checkLibExist("macosx64/libimgui-java64.dylib")
         if (forMacArm64)
-            checkLibExist("macosxarm64/libimgui-moulberry92-java64.dylib")
+            checkLibExist("macosxarm64/libimgui-java64.dylib")
     }
 
     void checkLibExist(String libName) {
@@ -173,19 +165,12 @@ class GenerateLibs extends DefaultTask {
     BuildTarget createMacTarget(Architecture arch) {
         def minMacOsVersion = '10.15'
         def macTarget = BuildTarget.newDefaultTarget(Os.MacOsX, Architecture.Bitness._64, arch)
-        macTarget.libName = "libimgui-moulberry92-java64.dylib" // Lib for arm64 will be named the same for consistency.
-        requireCpp17(macTarget)
+        macTarget.libName = "libimgui-java64.dylib" // Lib for arm64 will be named the same for consistency.
+        macTarget.cppFlags += ' -std=c++14'
         macTarget.cppFlags = macTarget.cppFlags.replace('10.7', minMacOsVersion)
         macTarget.linkerFlags = macTarget.linkerFlags.replace('10.7', minMacOsVersion)
         addFreeTypeIfEnabled(macTarget)
         return macTarget
-    }
-
-    void requireCpp17(BuildTarget target) {
-        target.cppFlags = target.cppFlags.replace(' -std=c++14', '')
-        if (!target.cppFlags.contains('-std=c++17')) {
-            target.cppFlags += ' -std=c++17'
-        }
     }
 
     void addFreeTypeIfEnabled(BuildTarget target) {

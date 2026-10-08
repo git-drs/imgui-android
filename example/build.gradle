@@ -1,0 +1,27 @@
+plugins {
+    id 'application'
+}
+
+sourceCompatibility = 17
+targetCompatibility = 17
+
+application {
+    mainClass = 'Main'
+    try {
+        if (libPath) {
+            applicationDefaultJvmArgs = ["-Dimgui.library.path=$libPath"]
+        }
+    } catch (ignored) {
+        // ignore
+    }
+}
+
+dependencies {
+    implementation project(':imgui-app')
+}
+
+run {
+    if (org.gradle.internal.os.OperatingSystem.current().isMacOsX()) {
+        jvmArgs += ['-XstartOnFirstThread', '-Djava.awt.headless=true']
+    }
+}

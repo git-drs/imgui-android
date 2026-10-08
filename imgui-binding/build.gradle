@@ -8,15 +8,8 @@ plugins {
     id 'signing'
 }
 
-java {
-    toolchain {
-        languageVersion.set(JavaLanguageVersion.of(17))
-    }
-}
-
-tasks.withType(JavaCompile).configureEach {
-    options.release.set(8)
-}
+sourceCompatibility = 17
+targetCompatibility = 17
 
 dependencies {
     testImplementation("org.junit.jupiter:junit-jupiter-api:5.13.4")
@@ -44,7 +37,32 @@ tasks.register('generateApi', GenerateApi)
 
 tasks.register('generateLibs', GenerateLibs) {
     it.dependsOn assemble
-    it.dependsOn rootProject.tasks.named('applyVendorPatches')
+}
+
+tasks.register('generateJniSources') {
+    dependsOn compileJava
+    doLast {
+        def jniDir = project.file('build/jni')
+        jniDir.deleteDir()
+        jniDir.mkdirs()
+        new com.badlogic.gdx.jnigen.NativeCodeGenerator().generate(
+            project.file('src/generated/java').path,
+            project.file('build/classes/java/main').path,
+            jniDir.path
+        )
+        project.copy {
+            ['include/imgui', 'include/imnodes', 'include/imgui-node-editor', 'include/imguizmo', 'include/implot', 'include/imgui_club/imgui_memory_editor', 'include/imgui-knobs'].each {
+                from(rootProject.file(it)) { include('*.h', '*.cpp', '*.inl') }
+            }
+            from(rootProject.file('imgui-binding/src/main/native'))
+            into(jniDir)
+            duplicatesStrategy = DuplicatesStrategy.INCLUDE
+        }
+        project.copy {
+            from(rootProject.file('imgui-binding/src/main/native/imconfig.h'))
+            into(jniDir)
+        }
+    }
 }
 
 apply from: "$rootDir/publish.gradle"
@@ -56,14 +74,10 @@ jar {
     }
 }
 
-// Capture project.version at configuration time so the closure below does not
-// reference the Project model at execution time -- Gradle 9 configuration cache
-// requirement.
-def processVersion = project.version.toString()
 processResources {
     filesMatching('**/imgui-java.properties') {
         filter(ReplaceTokens, tokens: [
-                'version': processVersion
+                'version': version
         ])
     }
 }
